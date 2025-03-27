@@ -47,8 +47,19 @@ const MyDatePicker = (
   };
 
   let objMoment: any = undefined;
-  if (props.value && typeof props.value == 'string') objMoment = moment(props.value, saveFormat);
-  else objMoment = props?.value;
+  if (props.value && typeof props.value == 'string') {
+    try {
+      objMoment = moment(props.value, saveFormat);
+      if (!objMoment.isValid()) {
+        objMoment = undefined;
+      }
+    } catch (error) {
+      console.error('Invalid date value:', error);
+      objMoment = undefined;
+    }
+  } else {
+    objMoment = props?.value;
+  }
 
   return (
     <DatePicker

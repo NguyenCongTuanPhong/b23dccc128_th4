@@ -4,7 +4,8 @@ import type { IInitialState } from './services/base/typing';
 /**
  * @see https://umijs.org/zh-CN/plugins/plugin-access
  * */
-export default function access(initialState: IInitialState) {
+export default function access(initialState: { currentUser?: API.CurrentUser } | undefined) {
+	const { currentUser } = initialState ?? {};
 	// const scopes = initialState.authorizedPermissions?.find((item) => item.rsname === currentRole)?.scopes;
 	const scopes = initialState.authorizedPermissions?.map((item) => item.scopes).flat();
 
@@ -60,5 +61,12 @@ export default function access(initialState: IInitialState) {
 		//     : (route: any) => {
 		//         return handlePhanNhom(initialState, route?.maChucNang) || false;
 		//       },
+		canAdmin: currentUser && currentUser.access === 'admin',
+		canDiplomaAdmin: currentUser && (currentUser.access === 'admin' || currentUser.access === 'diploma_admin'),
+		canDiplomaView: currentUser && (
+			currentUser.access === 'admin' || 
+			currentUser.access === 'diploma_admin' || 
+			currentUser.access === 'diploma_user'
+		),
 	};
 }

@@ -1,21 +1,23 @@
 import { useState, useCallback, useEffect } from 'react';
 import {
   getDiplomaBooks,
-  createDiplomaBook as createDiplomaBookService,
+  createDiplomaBook,
   getGraduationDecisions,
-  createGraduationDecision as createGraduationDecisionService,
+  createGraduationDecision,
+  updateGraduationDecision,
   getDiplomaFormFields,
-  createDiplomaFormField as createDiplomaFormFieldService,
-  updateDiplomaFormField as updateDiplomaFormFieldService,
-  deleteDiplomaFormField as deleteDiplomaFormFieldService,
+  createDiplomaFormField,
+  updateDiplomaFormField,
+  deleteDiplomaFormField,
   getDiplomaInfos,
-  createDiplomaInfo as createDiplomaInfoService,
-  searchDiplomaInfo as searchDiplomaInfoService,
+  createDiplomaInfo,
+  searchDiplomaInfo,
 } from '@/services/diploma';
 
 // Types
 export type DataType = 'String' | 'Number' | 'Date';
 
+// Interfaces
 export interface DiplomaFormField {
   id: string;
   name: string;
@@ -38,6 +40,7 @@ export interface GraduationDecision {
   issueDate: string;
   summary: string;
   diplomaBookId: string;
+  searchCount: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -55,10 +58,12 @@ export interface DiplomaInfo {
   updatedAt: string;
 }
 
-interface ApiResponse<T> {
-  data: T;
-  status: number;
-  message?: string;
+export interface DiplomaSearchParams {
+  diplomaNumber?: string;
+  bookNumber?: number;
+  studentId?: string;
+  fullName?: string;
+  dateOfBirth?: string;
 }
 
 // Model
@@ -78,10 +83,11 @@ export default function useDiplomaModel() {
           getDiplomaFormFields(),
           getDiplomaInfos(),
         ]);
-        setDiplomaBooks(booksRes.data);
-        setGraduationDecisions(decisionsRes.data);
-        setDiplomaFormFields(fieldsRes.data);
-        setDiplomaInfos(infosRes.data);
+
+        if (booksRes.status === 200) setDiplomaBooks(booksRes.data || []);
+        if (decisionsRes.status === 200) setGraduationDecisions(decisionsRes.data || []);
+        if (fieldsRes.status === 200) setDiplomaFormFields(fieldsRes.data || []);
+        if (infosRes.status === 200) setDiplomaInfos(infosRes.data || []);
       } catch (error) {
         console.error('Error loading data:', error);
       }
@@ -90,12 +96,24 @@ export default function useDiplomaModel() {
   }, []);
 
   // Diploma Book operations
-  const createDiplomaBook = useCallback(async (year: number): Promise<DiplomaBook> => {
+  const fetchDiplomaBooks = async () => {
     try {
-      const response: ApiResponse<DiplomaBook> = await createDiplomaBookService(year);
-      if (response.data) {
+      const response = await getDiplomaBooks();
+      if (response.status === 200) {
+        setDiplomaBooks(response.data || []);
+      }
+    } catch (error) {
+      console.error('Error fetching diploma books:', error);
+      throw error;
+    }
+  };
+
+  const createBook = useCallback(async (year: number) => {
+    try {
+      const response = await createDiplomaBook(year);
+      if (response.status === 200 && response.data) {
         setDiplomaBooks(prev => [...prev, response.data]);
-        return response.data;
+        return response;
       }
       throw new Error(response.message || 'Failed to create diploma book');
     } catch (error) {
@@ -104,24 +122,11 @@ export default function useDiplomaModel() {
     }
   }, []);
 
-  const getDiplomaBook = useCallback(async (id: string): Promise<DiplomaBook> => {
-    try {
-      const book = diplomaBooks.find(b => b.id === id);
-      if (!book) {
-        throw new Error('Diploma book not found');
-      }
-      return book;
-    } catch (error) {
-      console.error('Error getting diploma book:', error);
-      throw error;
-    }
-  }, [diplomaBooks]);
-
   // Graduation Decision operations
-  const createGraduationDecision = useCallback(async (decision: Omit<GraduationDecision, 'id' | 'createdAt' | 'updatedAt'>): Promise<GraduationDecision> => {
+  const createDecision = useCallback(async (data: Omit<GraduationDecision, 'id' | 'createdAt' | 'updatedAt' | 'searchCount'>) => {
     try {
-      const response: ApiResponse<GraduationDecision> = await createGraduationDecisionService(decision);
-      if (response.data) {
+      const response = await createGraduationDecision(data);
+      if (response.status === 200 && response.data) {
         setGraduationDecisions(prev => [...prev, response.data]);
         return response.data;
       }
@@ -132,11 +137,25 @@ export default function useDiplomaModel() {
     }
   }, []);
 
-  // Diploma Form Field operations
-  const createDiplomaFormField = useCallback(async (field: Omit<DiplomaFormField, 'id'>): Promise<DiplomaFormField> => {
+  const updateDecision = useCallback(async (id: string, data: Partial<GraduationDecision>) => {
     try {
-      const response: ApiResponse<DiplomaFormField> = await createDiplomaFormFieldService(field);
-      if (response.data) {
+      const response = await updateGraduationDecision(id, data);
+      if (response.status === 200 && response.data) {
+        setGraduationDecisions(prev => prev.map(d => d.id === id ? response.data : d));
+        return response.data;
+      }
+      throw new Error(response.message || 'Failed to update graduation decision');
+    } catch (error) {
+      console.error('Error updating graduation decision:', error);
+      throw error;
+    }
+  }, []);
+
+  // Diploma Form Field operations
+  const createFormField = useCallback(async (field: Omit<DiplomaFormField, 'id'>) => {
+    try {
+      const response = await createDiplomaFormField(field);
+      if (response.status === 200 && response.data) {
         setDiplomaFormFields(prev => [...prev, response.data]);
         return response.data;
       }
@@ -147,10 +166,10 @@ export default function useDiplomaModel() {
     }
   }, []);
 
-  const updateDiplomaFormField = useCallback(async (id: string, field: Partial<DiplomaFormField>): Promise<DiplomaFormField> => {
+  const updateFormField = useCallback(async (id: string, field: Partial<DiplomaFormField>) => {
     try {
-      const response: ApiResponse<DiplomaFormField> = await updateDiplomaFormFieldService(id, field);
-      if (response.data) {
+      const response = await updateDiplomaFormField(id, field);
+      if (response.status === 200 && response.data) {
         setDiplomaFormFields(prev => prev.map(f => f.id === id ? response.data : f));
         return response.data;
       }
@@ -161,9 +180,9 @@ export default function useDiplomaModel() {
     }
   }, []);
 
-  const deleteDiplomaFormField = useCallback(async (id: string): Promise<void> => {
+  const deleteFormField = useCallback(async (id: string) => {
     try {
-      const response: ApiResponse<void> = await deleteDiplomaFormFieldService(id);
+      const response = await deleteDiplomaFormField(id);
       if (response.status === 200) {
         setDiplomaFormFields(prev => prev.filter(f => f.id !== id));
       } else {
@@ -176,10 +195,10 @@ export default function useDiplomaModel() {
   }, []);
 
   // Diploma Info operations
-  const createDiplomaInfo = useCallback(async (info: Omit<DiplomaInfo, 'id' | 'createdAt' | 'updatedAt'>): Promise<DiplomaInfo> => {
+  const createInfo = useCallback(async (info: Omit<DiplomaInfo, 'id' | 'createdAt' | 'updatedAt' | 'bookNumber'>) => {
     try {
-      const response: ApiResponse<DiplomaInfo> = await createDiplomaInfoService(info);
-      if (response.data) {
+      const response = await createDiplomaInfo(info);
+      if (response.status === 200 && response.data) {
         setDiplomaInfos(prev => [...prev, response.data]);
         return response.data;
       }
@@ -190,16 +209,20 @@ export default function useDiplomaModel() {
     }
   }, []);
 
-  const searchDiplomaInfo = useCallback(async (params: {
-    diplomaNumber?: string;
-    bookNumber?: number;
-    studentId?: string;
-    fullName?: string;
-    dateOfBirth?: string;
-  }): Promise<DiplomaInfo[]> => {
+  // Search diploma info with at least 2 parameters
+  const searchInfo = useCallback(async (params: DiplomaSearchParams) => {
     try {
-      const response: ApiResponse<DiplomaInfo[]> = await searchDiplomaInfoService(params);
-      return response.data;
+      // Validate at least 2 search parameters
+      const filledParams = Object.entries(params).filter(([_, value]) => value !== undefined && value !== '');
+      if (filledParams.length < 2) {
+        throw new Error('Vui lòng nhập ít nhất 2 thông tin để tìm kiếm');
+      }
+
+      const response = await searchDiplomaInfo(params);
+      if (response.status === 200) {
+        return response.data || [];
+      }
+      throw new Error(response.message || 'Failed to search diploma info');
     } catch (error) {
       console.error('Error searching diploma info:', error);
       throw error;
@@ -207,17 +230,27 @@ export default function useDiplomaModel() {
   }, []);
 
   return {
+    // State
     diplomaBooks,
     graduationDecisions,
     diplomaFormFields,
     diplomaInfos,
-    createDiplomaBook,
-    getDiplomaBook,
-    createGraduationDecision,
-    createDiplomaFormField,
-    updateDiplomaFormField,
-    deleteDiplomaFormField,
-    createDiplomaInfo,
-    searchDiplomaInfo,
+
+    // Book operations
+    fetchDiplomaBooks,
+    createBook,
+
+    // Decision operations
+    createDecision,
+    updateDecision,
+
+    // Form field operations
+    createFormField,
+    updateFormField,
+    deleteFormField,
+
+    // Info operations
+    createInfo,
+    searchInfo,
   };
-} 
+}
